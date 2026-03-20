@@ -106,6 +106,7 @@ async def get_anomalies(username: str = Depends(authenticate)):
             <div class="header">🚨 Wykryte Anomalie (Ostatnie 50)</div>
             <div class="nav">
                 <a href="/">← Dashboard</a>
+                <a href="/enrich">Bulk Enrichment</a>
             </div>
             <table>
                 <thead>
@@ -125,6 +126,45 @@ async def get_anomalies(username: str = Depends(authenticate)):
             <footer style="margin-top: 30px; color: #666; font-size: 0.8em;">
                 Wygenerowano: {html.escape(str(db.get_stats()))}
             </footer>
+        </body>
+    </html>
+    """
+
+@app.get("/enrich", response_class=HTMLResponse)
+async def get_enrich(username: str = Depends(authenticate)):
+    return f"""
+    <html>
+        <head>
+            <title>PolskiCyberShield - Wzbogacanie CSV</title>
+            <style>
+                body {{ font-family: sans-serif; background: #1a1a1a; color: white; text-align: center; padding: 20px; }}
+                .header {{ color: #ff0000; font-size: 2.5em; margin-bottom: 30px; border-bottom: 2px solid #ff0000; display: inline-block; padding-bottom: 10px; }}
+                .nav {{ margin: 20px; }}
+                .nav a {{ color: #00ff00; text-decoration: none; margin: 0 15px; padding: 5px 10px; border: 1px solid #00ff00; border-radius: 5px; }}
+                .nav a:hover {{ background: #00ff00; color: #000; }}
+                .card {{ background: #2a2a2a; padding: 30px; margin: 30px auto; border-radius: 10px; border: 1px solid #444; max-width: 600px; }}
+                button {{ background-color: #00ff00; color: #000; padding: 10px 20px; margin-top: 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 1.1em; font-weight: bold; }}
+                button:hover {{ background-color: #00cc00; }}
+                input[type=file] {{ display: block; margin: 20px auto; color: #fff; }}
+            </style>
+        </head>
+        <body>
+            <div class="header">🛡️ Bulk IP Enrichment</div>
+            <div class="nav">
+                <a href="/">← Dashboard</a>
+                <a href="/anomalies">Anomalie</a>
+            </div>
+            
+            <div class="card">
+                <h3>🔍 Wzbogać listę adresów IP (CSV)</h3>
+                <p>Upload a CSV file containing an <code>ip</code> column. We will enrich it with threat intelligence scores and sources.</p>
+                <form action="http://localhost:10000/api/bulk-ip-csv" method="POST" enctype="multipart/form-data">
+                    <input type="file" name="file" accept=".csv" required />
+                    <!-- If RapidAPI is used locally, you might need to supply the header via JS instead of standard form submit. Assuming local DEV without proxy for now. -->
+                    <button type="submit">Enrich CSV</button>
+                </form>
+            </div>
+            
         </body>
     </html>
     """

@@ -128,29 +128,106 @@ def health():
         'timestamp': datetime.now().isoformat()
     })
 
-@app.route('/api/check/<ip_addr>', methods=['GET'])
-def check_ip(ip_addr):
+from bulk_processor import BulkIPProcessor
+
+# Max file size: 5MB
+MAX_CONTENT_LENGTH = 5 * 1024 * 1024 
+MAX_ROWS = 2000
+
+def get_db_connection():
+    """Returns a standalone SQLite connection"""
+    conn = sqlite3.connect(db.db_path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+import sqlite3
+
+def lookup_ip_internal(ip_addr: str) -> dict:
+    """Internal business logic for IP lookup without HTTP overhead"""
     try:
         import ipaddress
         ipaddress.ip_address(ip_addr)
     except ValueError:
-        return jsonify({'error': 'Invalid IP format'}), 400
+        return {'ti_score': 0, 'risk_level': 'invalid', 'sources': '', 'seen_in_honeypot': 0}
     
     try:
-        # Search in DB
-        with db._get_conn() as conn:
+        with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM anomalies WHERE src_ip = ?", (ip_addr,))
             matches = [dict(row) for row in cursor.fetchall()]
-            
-        return jsonify({
-            'ip': ip_addr,
-            'is_malicious': len(matches) > 0,
-            'threat_count': len(matches),
-            'threats': matches
-        })
+        
+        if not matches:
+            return {'ti_score': 0, 'risk_level': 'none', 'sources': '', 'seen_in_honeypot': 0}
+        
+        # Aggregate results
+        severity_map = {"CRITICAL": 100, "HIGH": 80, "MEDIUM": 50, "LOW": 20}
+        reverse_map = {100: "CRITICAL", 80: "HIGH", 50: "MEDIUM", 20: "LOW"}
+        
+        max_val = 0
+        scores = []
+        sources = set()
+        honeypot = 0
+        
+        for m in matches:
+            val = severity_map.get(m['severity'], 20)
+            if val > max_val: max_val = val
+            scores.append(m['score'])
+            if m['type']: sources.add(m['type'])
+            if m['type'] == 'HONEYPOT_HIT' or 'honeypot' in (m['description'] or '').lower():
+                honeypot = 1
+                
+        return {
+            'ti_score': max(scores) if scores else 0,
+            'risk_level': reverse_map.get(max_val, 'LOW').lower(),
+            'sources': ";".join(sources),
+            'seen_in_honeypot': honeypot
+        }
     except Exception as e:
-        logger.error(f"Error checking IP: {e}")
+        logger.error(f"Internal IP lookup failed for {ip_addr}: {e}")
+        return {'ti_score': 0, 'risk_level': 'error', 'sources': '', 'seen_in_honeypot': 0}
+
+@app.route('/api/check/<ip_addr>', methods=['GET'])
+def check_ip(ip_addr):
+    res = lookup_ip_internal(ip_addr)
+    return jsonify({
+        'ip': ip_addr,
+        'is_malicious': res['risk_level'] not in ['none', 'invalid'],
+        'ti_score': res['ti_score'],
+        'risk_level': res['risk_level'],
+        'sources': res['sources'],
+        'seen_in_honeypot': res['seen_in_honeypot']
+    })
+
+@app.route('/api/bulk-ip-csv', methods=['POST'])
+def bulk_enrich_csv():
+    """Upload CSV, enrich with threat intel, and return as download"""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
+        
+    file = request.files['file']
+    if not file or not file.filename.endswith('.csv'):
+        return jsonify({'error': 'Invalid file format. Upload .csv'}), 400
+
+    # Size validation
+    file_bytes = file.read()
+    if len(file_bytes) > MAX_CONTENT_LENGTH:
+        return jsonify({'error': f'File too large. Max {MAX_CONTENT_LENGTH/1024/1024}MB'}), 413
+    
+    try:
+        processor = BulkIPProcessor(lookup_func=lookup_ip_internal, max_rows=MAX_ROWS)
+        enriched_csv = processor.process_csv(file_bytes)
+        
+        # Return as downloadable file
+        from flask import Response
+        return Response(
+            enriched_csv,
+            mimetype="text/csv",
+            headers={"Content-disposition": "attachment; filename=enriched_ips.csv"}
+        )
+    except ValueError as val_err:
+        return jsonify({'error': str(val_err)}), 400
+    except Exception as err:
+        logger.error(f"Bulk CSV error: {err}")
         abort(500)
 
 if __name__ == '__main__':
@@ -162,3 +239,4 @@ if __name__ == '__main__':
         logger.info("Running in DEVELOPMENT mode")
         
     app.run(host='0.0.0.0', port=port)
+
