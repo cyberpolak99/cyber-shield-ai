@@ -7,6 +7,7 @@ import sqlite3
 from db_manager import DBManager
 from security import protected
 from bulk_processor import BulkIPProcessor
+from honeypot_feed import is_ip_in_honeypot, get_honeypot_details, get_all_honeypot_ips
 
 # Configure logging
 logging.basicConfig(
@@ -134,45 +135,68 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+# ─── Honeypot scoring constants ─────────────────────────────────────────────
+# When IP is in honeypot AND has external feed data → boost risk level.
+HONEYPOT_SCORE_BOOST = 0.15       # added to ti_score if also in feeds
+HONEYPOT_MIN_RISK_LEVEL = "high"  # minimum risk_level when seen in honeypot
+
+_RISK_ORDER = ["none", "low", "medium", "high", "critical"]
+
+def _elevate_risk(current: str, minimum: str) -> str:
+    """Returns the higher of two risk levels."""
+    try:
+        return current if _RISK_ORDER.index(current) >= _RISK_ORDER.index(minimum) else minimum
+    except ValueError:
+        return current
+
+
 def lookup_ip_internal(ip_addr: str) -> dict:
-    """Internal business logic for IP lookup without HTTP overhead"""
+    """Internal business logic for IP lookup without HTTP overhead."""
     try:
         import ipaddress
         ipaddress.ip_address(ip_addr)
     except ValueError:
         return {'ti_score': 0, 'risk_level': 'invalid', 'sources': '', 'seen_in_honeypot': 0}
-    
+
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM anomalies WHERE src_ip = ?", (ip_addr,))
             matches = [dict(row) for row in cursor.fetchall()]
-        
-        if not matches:
-            return {'ti_score': 0, 'risk_level': 'none', 'sources': '', 'seen_in_honeypot': 0}
-        
-        # Aggregate results
+
         severity_map = {"CRITICAL": 100, "HIGH": 80, "MEDIUM": 50, "LOW": 20}
-        reverse_map = {100: "CRITICAL", 80: "HIGH", 50: "MEDIUM", 20: "LOW"}
-        
+        reverse_map = {100: "critical", 80: "high", 50: "medium", 20: "low"}
+
         max_val = 0
         scores = []
         sources = set()
-        honeypot = 0
-        
+
         for m in matches:
-            val = severity_map.get(m['severity'], 20)
-            if val > max_val: max_val = val
-            scores.append(m['score'])
-            if m['type']: sources.add(m['type'])
-            if m['type'] == 'HONEYPOT_HIT' or 'honeypot' in (m['description'] or '').lower():
-                honeypot = 1
-                
+            val = severity_map.get(str(m.get('severity', '')).upper(), 20)
+            if val > max_val:
+                max_val = val
+            scores.append(float(m.get('score') or 0))
+            if m.get('type'):
+                sources.add(str(m['type']))
+
+        base_score    = max(scores) if scores else 0.0
+        base_risk     = reverse_map.get(max_val, 'none') if matches else 'none'
+
+        # ── Honeypot enrichment ──────────────────────────────────────────────
+        in_honeypot = is_ip_in_honeypot(ip_addr)
+        if in_honeypot:
+            sources.add('cybershield-honeypot')
+            # Boost score if ALSO in external feeds, cap at 1.0
+            if matches:
+                base_score = min(1.0, base_score + HONEYPOT_SCORE_BOOST)
+            # Enforce minimum risk level
+            base_risk = _elevate_risk(base_risk, HONEYPOT_MIN_RISK_LEVEL)
+
         return {
-            'ti_score': max(scores) if scores else 0,
-            'risk_level': reverse_map.get(max_val, 'LOW').lower(),
-            'sources': ";".join(sources),
-            'seen_in_honeypot': honeypot
+            'ti_score':         int(base_score * 10000) / 10000,
+            'risk_level':       base_risk,
+            'sources':          ";".join(sorted(sources)),
+            'seen_in_honeypot': 1 if in_honeypot else 0,
         }
     except Exception as e:
         logger.error(f"Internal IP lookup failed for {ip_addr}: {e}")
@@ -182,13 +206,29 @@ def lookup_ip_internal(ip_addr: str) -> dict:
 @protected
 def check_ip(ip_addr):
     res = lookup_ip_internal(ip_addr)
+    details = get_honeypot_details(ip_addr) if res['seen_in_honeypot'] else {}
     return jsonify({
-        'ip': ip_addr,
-        'is_malicious': res['risk_level'] not in ['none', 'invalid'],
-        'ti_score': res['ti_score'],
-        'risk_level': res['risk_level'],
-        'sources': res['sources'],
-        'seen_in_honeypot': res['seen_in_honeypot']
+        'ip':               ip_addr,
+        'is_malicious':     res['risk_level'] not in ['none', 'invalid'],
+        'ti_score':         res['ti_score'],
+        'risk_level':       res['risk_level'],
+        'sources':          res['sources'],
+        'seen_in_honeypot': res['seen_in_honeypot'],
+        'honeypot_details': details,
+    })
+
+
+@app.route('/api/honeypot-feed', methods=['GET'])
+@protected
+def honeypot_feed():
+    """Returns list of all IPs observed by the Cyber Shield honeypot."""
+    limit = request.args.get('limit', 200, type=int)
+    limit = max(1, min(limit, 1000))
+    ips = get_all_honeypot_ips(limit=limit)
+    return jsonify({
+        'status': 'success',
+        'count':  len(ips),
+        'data':   ips,
     })
 
 @app.route('/api/bulk-ip-csv', methods=['POST'])
