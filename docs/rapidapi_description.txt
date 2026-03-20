@@ -1,135 +1,189 @@
 ================================================================================
-RAPIDAPI LISTING COPY — Cyber Shield AI: Threat Intelligence API
+RAPIDAPI LISTING — Cyber Shield AI: Threat Intelligence API
+FINAL MARKETING COPY — ready to paste into RapidAPI Provider Panel
 ================================================================================
 
-HEADLINE (max 80 chars):
-──────────────────────────────────────────────────────────────────────────────
-Real-time IP Threat Intelligence & Bulk CSV Enrichment for Security Teams
 
-SHORT DESCRIPTION (2–3 sentences, shown under title on RapidAPI):
+HEADLINE (Short Description field, max 80 chars):
 ──────────────────────────────────────────────────────────────────────────────
-Cyber Shield AI delivers real-time IP reputation scoring powered by an active
-honeypot sensor network and automated threat feeds. Query single IPs or upload
-thousands at once via Bulk CSV Enrichment to detect malicious actors, brute
-force sources, malware C2 nodes, and honeypot-flagged attackers. Built for SOC
-analysts, developers, and security researchers.
+Real-time IP Threat Intelligence & Bulk CSV Enrichment – Powered by Honeypot
 
-LONG DESCRIPTION (for RapidAPI full description box):
+SHORT DESCRIPTION (2–3 sentences):
+──────────────────────────────────────────────────────────────────────────────
+Cyber Shield AI delivers real-time IP reputation scoring powered by live
+honeypot telemetry from the Cyber Shield sensor network combined with automated
+threat feeds. Query single IPs or upload bulk CSV files (up to 2,000 rows) to
+enrich your data with `ti_score`, `risk_level`, `sources`, and
+`seen_in_honeypot` flags. Built for SOC analysts, penetration testers, and
+security-conscious developers.
+
+LONG DESCRIPTION (markdown, for the About/Description field):
 ──────────────────────────────────────────────────────────────────────────────
 ## What is Cyber Shield AI?
 
-Cyber Shield AI is a battle-tested threat intelligence platform that combines
-a live honeypot sensor network with automated feeds to build a continuously
-updated database of malicious IPs. The API exposes this intelligence in two
-ways: single IP lookups for real-time decisions, and bulk CSV enrichment for
-large-scale log analysis and data pipelines.
+Cyber Shield AI is a battle-tested threat intelligence platform that fuses
+**real honeypot telemetry** from the Cyber Shield sensor network with automated
+threat feeds to produce continuously updated IP reputation scores.
+
+Unlike APIs that rely solely on third-party databases, **Cyber Shield AI
+captures real attackers in the act**: every IP that probes the honeypot
+sensors is flagged immediately, scored, and available via this API.
 
 ## Key Features
 
-- **Live Honeypot Data**: IPs that probe real honeypot sensors are flagged
-  in real time and marked as `seen_in_honeypot: 1`.
-- **Risk Scoring**: Each IP receives a `ti_score` (0.0–1.0) and a human-
-  readable `risk_level` (none / low / medium / high / critical).
-- **Source Attribution**: Know exactly which threat feed or detection method
-  flagged an IP via the `sources` field.
-- **Bulk CSV Enrichment**: Upload a CSV with an `ip` column (up to 2,000 rows,
-  5 MB). Receive an enriched CSV back with all original columns preserved plus
-  four new intelligence columns.
-- **Production-Ready Auth**: Supports both direct `X-API-Key` auth and the
-  standard `X-RapidAPI-Proxy-Secret` for seamless RapidAPI integration.
+- 🕷️ **Live Honeypot Telemetry**: IPs detected by our honeypot sensors are
+  marked `seen_in_honeypot: 1` and automatically receive an elevated risk level.
+- 🔢 **Risk Scoring**: Each IP gets a `ti_score` from 0.0 (clean) to 1.0
+  (confirmed active threat) and a human-readable `risk_level`
+  (none / low / medium / high / critical).
+- 📊 **Bulk CSV IP Enrichment with Honeypot-Aware Scoring**: Upload a CSV
+  with an `ip` column (up to 2,000 rows). Receive a fully enriched CSV instantly,
+  preserving all your original columns.
+- 🔍 **Honeypot Feed Endpoint**: Query the full list of IPs observed by the
+  honeypot sensor, with hit counts and timestamps.
+- 🔑 **Production-Ready Auth**: Standard `X-API-Key` header for direct access,
+  plus native `X-RapidAPI-Proxy-Secret` support for RapidAPI subscribers.
+- ⚡ **Rate Limiting**: 60 requests per minute per key – fair use guaranteed.
 
 ## Use Cases
 
-1. **SOC / SIEM Log Enrichment** — Paste firewall or IDS logs as CSV and get
-   instant threat scores to prioritise incident response.
-2. **Penetration Testing Recon** — Check discovered IPs for prior malicious
-   activity, honeypot exposure, and known C2 infrastructure flags.
-3. **Threat Hunting** — Query IPs from network captures to surface latent
-   threat actors in your environment.
-4. **API & Application Security** — Integrate single-IP lookups into your
-   login or signup flow to block known bad actors in real time.
-5. **Threat Intelligence Pipelines** — Automate nightly bulk enrichment of
-   SIEM alerts or CDN access logs without manual investigation.
+1. **SOC / SIEM Log Enrichment** — Drop your firewall or IDS logs as CSV and
+   get instant threat scores to prioritise incident response. Honeypot-observed
+   IPs are automatically flagged.
 
-================================================================================
-ENDPOINTS
-================================================================================
+2. **Penetration Testing Recon** — Check IP addresses found during recon
+   against our honeypot-aware feed to identify known C2 nodes, brute-force
+   sources, and prior attack history.
 
-1. GET /api/check/{ip}
-──────────────────────
-Single IP reputation lookup.
+3. **Threat Hunting** — Enrich network capture data in bulk to surface latent
+   threat actors hiding in your environment.
 
-Request example:
-  GET /api/check/45.133.1.20
-  X-API-Key: your-api-key-here
+4. **API & Application Security** — Integrate `/api/check/{ip}` into your
+   authentication flow to block known malicious actors at sign-up or login.
 
-Response example:
-  {
-    "ip": "45.133.1.20",
-    "is_malicious": true,
-    "ti_score": 1.0,
-    "risk_level": "critical",
-    "sources": "Malware;BruteForce",
-    "seen_in_honeypot": 1
+5. **Automated Threat Intelligence Pipelines** — Schedule nightly bulk CSV
+   enrichment of SIEM alerts or CDN access logs with zero manual intervention.
+
+## Example: Single IP Lookup
+
+```
+GET /api/check/45.133.1.20
+X-API-Key: your-api-key
+```
+
+Response:
+```json
+{
+  "ip": "45.133.1.20",
+  "is_malicious": true,
+  "ti_score": 1.0,
+  "risk_level": "critical",
+  "sources": "Malware;cybershield-honeypot",
+  "seen_in_honeypot": 1,
+  "honeypot_details": {
+    "hit_count": 7,
+    "first_seen": "2026-03-15 12:00:00",
+    "last_seen": "2026-03-20 21:00:00"
   }
+}
+```
 
-Field descriptions:
-  ip              — Queried IP address
-  is_malicious    — true if any threat record exists
-  ti_score        — 0.0 (clean) to 1.0 (confirmed threat)
-  risk_level      — none | low | medium | high | critical
-  sources         — semicolon-separated threat source names
-  seen_in_honeypot — 1 if flagged by honeypot sensor, 0 otherwise
+## Example: Bulk CSV Enrichment
 
+Upload:
+```
+ip,label
+45.133.1.20,suspicious
+1.2.3.4,clean
+```
 
-2. POST /api/bulk-ip-csv
-────────────────────────
-Upload a CSV file and receive an enriched CSV with threat intelligence columns.
-
-Request:
-  Content-Type: multipart/form-data
-  Field: file (.csv, max 5MB, max 2000 rows, must have column "ip")
-  Header: X-API-Key: your-api-key-here
-
-Input CSV example:
-  ip,label
-  45.133.1.20,suspicious
-  185.220.101.5,unknown
-  1.2.3.4,clean
-
-Output CSV example:
-  ip,label,ti_score,risk_level,sources,seen_in_honeypot
-  45.133.1.20,suspicious,1.0,critical,Malware,1
-  185.220.101.5,unknown,0.8,high,BruteForce,0
-  1.2.3.4,clean,0.0,none,,0
+Download (enriched):
+```
+ip,label,ti_score,risk_level,sources,seen_in_honeypot
+45.133.1.20,suspicious,1.0,critical,Malware;cybershield-honeypot,1
+1.2.3.4,clean,0.0,none,,0
+```
 
 ================================================================================
-AUTHENTICATION
+GITHUB REPO DESCRIPTION (max 160 chars for repo "About" field):
 ================================================================================
 
-Header (one of the following is required for protected endpoints):
-
-  X-API-Key: <your-direct-api-key>
-    — For direct access. Subscribe on RapidAPI or contact us for a key.
-
-  X-RapidAPI-Proxy-Secret: <secret>
-    — Automatically added by RapidAPI gateway for subscribers.
-
-Public endpoints (no auth required):
-  GET /
-  GET /api/health
+Real-time IP threat intelligence API with live honeypot integration, bulk CSV
+enrichment, API key auth, RapidAPI support – built with Python/Flask + SQLite.
 
 ================================================================================
-RATE LIMITS
+GITHUB TOPICS (tags):
+================================================================================
+cybersecurity threat-intelligence honeypot ip-reputation bulk-enrichment
+soc pentest python flask sqlite rate-limiting rapidapi
+
+================================================================================
+SOCIAL MEDIA – SAMPLE POSTS
 ================================================================================
 
-  - 60 requests per 60-second sliding window per API key / RapidAPI user
-  - On limit exceeded: HTTP 429 with {"error": "Rate limit exceeded", "retry_after_seconds": N}
+--- TWITTER / X (1) ---
+🛡️ Just shipped Cyber Shield AI v1.0 on RapidAPI!
+
+Real-time #ThreatIntelligence API powered by an actual live honeypot:
+✅ Single IP lookup → ti_score + risk_level
+✅ Bulk CSV enrichment (2,000 IPs/request)
+✅ seen_in_honeypot flag from real attack data
+
+#CyberSecurity #BlueTeam #infosec
+👉 [RapidAPI link]
+
+--- TWITTER / X (2) ---
+🔍 Want to know if an IP has been caught attacking real infrastructure?
+
+Cyber Shield AI API checks our live honeypot logs & threat feeds:
+• ti_score: 0.0 – 1.0
+• sources: Malware;cybershield-honeypot
+• seen_in_honeypot: 1 = real attack detected
+
+Free tier available on RapidAPI 🚀
+#ThreatIntel #SOC #PenTest
+
+--- REDDIT r/netsec ---
+Title: [Project] Open-source IP Threat Intelligence API with real honeypot data
+
+Hey r/netsec,
+
+I built Cyber Shield AI – a Python/Flask threat intelligence API that uses
+data from an actual live honeypot (logs attacks into SQLite) and exposes it
+via REST.
+
+Key features:
+- GET /api/check/{ip}: returns ti_score, risk_level, sources, seen_in_honeypot
+- POST /api/bulk-ip-csv: upload 2,000+ IPs, get enriched CSV back
+- GET /api/honeypot-feed: full list of honeypot-observed attackers
+- API key auth + RapidAPI proxy secret + rate limiting (sliding window)
+- 26 passing pytest tests
+
+Stack: Python 3.12 · Flask · FastAPI (dashboard) · SQLite · LRU cache
+
+GitHub: https://github.com/cyberpolak99/cyber-shield-ai
+
+Would love feedback on the scoring logic and feed architecture.
+
+--- REDDIT r/blueteamsec ---
+Title: Built a honeypot-backed IP enrichment API – free to try on RapidAPI
+
+After running a CyberShield honeypot for a few months collecting real attack
+data, I wired it up to a Flask API so you can:
+
+1. Check any IP against honeypot logs + threat feeds
+2. Bulk-enrich CSV exports from firewalls / SIEM
+
+The `seen_in_honeypot` flag means the IP actually hit our sensors –
+not just a third-party blacklist entry.
+
+API: [RapidAPI link]
+Source: https://github.com/cyberpolak99/cyber-shield-ai
 
 ================================================================================
-TAGS (for RapidAPI listing)
+TAGS for RapidAPI listing:
 ================================================================================
 cybersecurity, threat-intelligence, honeypot, ip-reputation, bulk-enrichment,
-soc, pentest, malware, fastapi, python, security, ip-lookup
+soc-tools, pentest, malware-detection, python, flask, security-api, ip-lookup
 
 ================================================================================
