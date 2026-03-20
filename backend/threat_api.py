@@ -1,9 +1,12 @@
-from flask import Flask, jsonify, request, abort
+from flask import Flask, jsonify, request, abort, Response
 from flask_cors import CORS
 from datetime import datetime
 import os
 import logging
+import sqlite3
 from db_manager import DBManager
+from security import require_api_key, rate_limited
+from bulk_processor import BulkIPProcessor
 
 # Configure logging
 logging.basicConfig(
@@ -65,6 +68,8 @@ def home():
     return "<h1>Threat Intelligence API</h1><p>Use /api/threats to fetch data.</p>"
 
 @app.route('/api/threats', methods=['GET'])
+@require_api_key
+@rate_limited
 def get_threats():
     try:
         limit = request.args.get('limit', 50, type=int)
@@ -99,6 +104,8 @@ def get_threats():
         abort(500)
 
 @app.route('/api/threats/stats', methods=['GET'])
+@require_api_key
+@rate_limited
 def get_stats():
     try:
         db_stats = db.get_stats()
@@ -128,10 +135,8 @@ def health():
         'timestamp': datetime.now().isoformat()
     })
 
-from bulk_processor import BulkIPProcessor
-
 # Max file size: 5MB
-MAX_CONTENT_LENGTH = 5 * 1024 * 1024 
+MAX_CONTENT_LENGTH = 5 * 1024 * 1024
 MAX_ROWS = 2000
 
 def get_db_connection():
@@ -139,8 +144,6 @@ def get_db_connection():
     conn = sqlite3.connect(db.db_path)
     conn.row_factory = sqlite3.Row
     return conn
-
-import sqlite3
 
 def lookup_ip_internal(ip_addr: str) -> dict:
     """Internal business logic for IP lookup without HTTP overhead"""
@@ -187,6 +190,8 @@ def lookup_ip_internal(ip_addr: str) -> dict:
         return {'ti_score': 0, 'risk_level': 'error', 'sources': '', 'seen_in_honeypot': 0}
 
 @app.route('/api/check/<ip_addr>', methods=['GET'])
+@require_api_key
+@rate_limited
 def check_ip(ip_addr):
     res = lookup_ip_internal(ip_addr)
     return jsonify({
@@ -199,6 +204,8 @@ def check_ip(ip_addr):
     })
 
 @app.route('/api/bulk-ip-csv', methods=['POST'])
+@require_api_key
+@rate_limited
 def bulk_enrich_csv():
     """Upload CSV, enrich with threat intel, and return as download"""
     if 'file' not in request.files:
@@ -218,7 +225,6 @@ def bulk_enrich_csv():
         enriched_csv = processor.process_csv(file_bytes)
         
         # Return as downloadable file
-        from flask import Response
         return Response(
             enriched_csv,
             mimetype="text/csv",
