@@ -5,7 +5,7 @@ import os
 import logging
 import sqlite3
 from db_manager import DBManager
-from security import require_api_key, rate_limited
+from security import protected
 from bulk_processor import BulkIPProcessor
 
 # Configure logging
@@ -38,17 +38,8 @@ def migrate_sample_data():
 
 migrate_sample_data()
 
-# RapidAPI Security Secret
-RAPIDAPI_SECRET = os.environ.get("RAPIDAPI_PROXY_SECRET")
-
-@app.before_request
-def check_rapidapi_header():
-    """Strictly enforce RapidAPI secret if configured"""
-    if RAPIDAPI_SECRET:
-        proxy_secret = request.headers.get("X-RapidAPI-Proxy-Secret")
-        if proxy_secret != RAPIDAPI_SECRET:
-            logger.warning(f"Unauthorized access attempt from {request.remote_addr}")
-            return jsonify({"error": "Unauthorized. RapidAPI Proxy only."}), 401
+# Auth is handled entirely by @protected in security.py.
+# RAPIDAPI_PROXY_SECRET and THREAT_API_KEYS are read from env there.
 
 @app.errorhandler(400)
 def bad_request(e):
@@ -68,8 +59,7 @@ def home():
     return "<h1>Threat Intelligence API</h1><p>Use /api/threats to fetch data.</p>"
 
 @app.route('/api/threats', methods=['GET'])
-@require_api_key
-@rate_limited
+@protected
 def get_threats():
     try:
         limit = request.args.get('limit', 50, type=int)
@@ -104,8 +94,7 @@ def get_threats():
         abort(500)
 
 @app.route('/api/threats/stats', methods=['GET'])
-@require_api_key
-@rate_limited
+@protected
 def get_stats():
     try:
         db_stats = db.get_stats()
@@ -190,8 +179,7 @@ def lookup_ip_internal(ip_addr: str) -> dict:
         return {'ti_score': 0, 'risk_level': 'error', 'sources': '', 'seen_in_honeypot': 0}
 
 @app.route('/api/check/<ip_addr>', methods=['GET'])
-@require_api_key
-@rate_limited
+@protected
 def check_ip(ip_addr):
     res = lookup_ip_internal(ip_addr)
     return jsonify({
@@ -204,8 +192,7 @@ def check_ip(ip_addr):
     })
 
 @app.route('/api/bulk-ip-csv', methods=['POST'])
-@require_api_key
-@rate_limited
+@protected
 def bulk_enrich_csv():
     """Upload CSV, enrich with threat intel, and return as download"""
     if 'file' not in request.files:
